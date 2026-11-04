@@ -1,7 +1,7 @@
-# Ninja War Discord Bot: ghi chú cho dev (v5)
+# Ninja War Discord Bot: ghi chú cho dev (v6)
 
 ## File
-- `ninjawar_builder.py`: bot chính (chọn ngôn ngữ, dựng role/kênh, xác minh, ticket, cấp bậc theo tin nhắn).
+- `ninjawar_builder.py`: bot chính (chọn ngôn ngữ, dựng role/kênh, xác minh, ticket, cấp bậc theo tin nhắn, giftcode).
 - `requirements.txt`: thư viện cần cài (`discord.py>=2.4`, `python-dotenv`).
 - `.gitignore`: chặn `.env` (token) và các file dữ liệu `*.db` không bị đẩy lên git.
 
@@ -44,7 +44,20 @@ python ninjawar_builder.py
 | `!xaykenh` | Tạo role, danh mục, kênh và bài đăng sẵn. Chạy lại an toàn: tạo phần còn thiếu, đổi tên mục cũ, **cập nhật quyền xem** của danh mục/kênh, sửa bài bot đã đăng cho khớp file, không đăng trùng |
 | `!taoticket` | Đăng hoặc cập nhật bảng ticket ở `🎫-mở-ticket` và `🎫-open-ticket` |
 
-Lệnh cho mọi người: `!rank` (xem cấp bậc), `!top` (bảng xếp hạng). Bot trả lời theo ngôn ngữ của kênh.
+Lệnh cho mọi người: `!rank` (xem cấp bậc), `!top` (bảng xếp hạng), `!code` (giftcode còn hạn). Bot trả lời theo ngôn ngữ của kênh.
+
+## Giftcode (mới ở v6)
+| Lệnh | Ai dùng | Việc |
+|---|---|---|
+| `!code` | Mọi người | Bot xóa tin nhắn lệnh và gửi **tin nhắn riêng** danh sách code còn hạn (theo ngôn ngữ người chơi đã chọn). Gõ trong tin nhắn riêng với bot cũng được. Mỗi người 10 giây dùng 1 lần |
+| `!themcode <code> <hạn> <phần thưởng>` | Chủ server, Hokage, Dev, Anbu | Thêm code và tự đăng thông báo (ping 🔔 Ping Giftcode) ở `🎁-giftcode` và `🎁-gift-codes`. Thêm lại code đã có = sửa, không ping lại |
+| `!xoacode <code>` | Như trên | Xóa code khỏi danh sách |
+
+- Hạn ghi `31/12/2026`, `31/12` hoặc `2026-12-31`; ghi `-` hoặc bỏ trống nếu không có hạn. Code hết hạn lúc 23:59 giờ Việt Nam của ngày đó.
+- Phần thưởng hai thứ tiếng ngăn bằng `|`: `!themcode NINJA2026 31/12/2026 Kim cương x100 | 100 Diamonds`. Người chơi tiếng Việt thấy phần trước, tiếng Anh thấy phần sau.
+- Code hết hạn tự ẩn khỏi `!code` và tự xóa sau 30 ngày.
+- Nếu người chơi chặn tin nhắn riêng, bot nhắc họ bật lại trong kênh (tin nhắc tự xóa sau 20 giây).
+- Tin nhắn bắt đầu bằng `!` không còn được tính vào cấp bậc.
 
 ## Lưu ý khi chạy `!xaykenh` trên server đang có
 - Quyền xem của các danh mục/kênh trong `LAYOUT` sẽ được **ghi đè** theo file. Nếu staff từng tự chỉnh quyền tay ở các kênh này, phần chỉnh tay sẽ mất.
@@ -54,7 +67,7 @@ Lệnh cho mọi người: `!rank` (xem cấp bậc), `!top` (bảng xếp hạn
 - Mất khoảng 3–5 phút vì giới hạn tốc độ của Discord.
 
 ## Dữ liệu
-- Số tin nhắn của người chơi lưu trong `levels.db` (SQLite), tự tạo **cạnh file .py**.
+- Số tin nhắn của người chơi và danh sách giftcode lưu trong `levels.db` (SQLite), tự tạo **cạnh file .py**.
 - File này phải nằm ở nơi lưu trữ bền vững và cần sao lưu định kỳ. Mất file là mất toàn bộ cấp bậc.
 - Bản v5 bật chế độ WAL nên cạnh `levels.db` sẽ có thêm `levels.db-wal` và `levels.db-shm`. **Đừng chỉ copy riêng `levels.db` khi bot đang chạy** vì có thể thiếu dữ liệu mới. Cách sao lưu đúng: `sqlite3 levels.db ".backup levels-backup.db"` (cài bằng `apt install sqlite3`), hoặc dừng bot rồi copy cả 3 file.
 - Không đưa `.env` và `levels.db` vào git.
@@ -63,13 +76,14 @@ Lệnh cho mọi người: `!rank` (xem cấp bậc), `!top` (bảng xếp hạn
 - `MSG_*`: bài tiếng Việt. `EN_*`: bài tiếng Anh. `MSG_LANG`: bài chọn ngôn ngữ.
 - `BUTTONS`: chữ trên nút (không đổi `custom_id`).
 - `TICKET_KINDS`, `TXT`: lời mở đầu ticket và câu trả lời của bot theo từng ngôn ngữ.
+- `GIFT_ADMIN_KEYS`: role được thêm/xóa giftcode. `CH_GIFT`: kênh bot đăng code mới.
 - `ROLE_SPECS`, `RANKS`, `COOLDOWN`, `MIN_LEN`, `COUNT_CATEGORIES`, `LAYOUT`.
 
 ## Việc cần làm sau khi chạy
 1. Điền link tải game (Android/iOS) và giftcode thật ở cả `MSG_TAIGAME` và `EN_DOWNLOAD`.
 2. Kiểm tra lịch trong `MSG_LICH` và `EN_SCHEDULE`. Mốc **20:30 "phát thư thưởng" là giả định**, cần xác nhận lại theo game.
 3. Gán role Hokage / Dev Shinobi / Anbu / Hỗ Trợ Viên cho đúng người.
-4. Kiểm thử bằng tài khoản phụ: chọn English → chỉ thấy kênh tiếng Anh; xác minh; đổi sang Tiếng Việt → thấy kênh tiếng Việt, vẫn đã xác minh; mở ticket (tài khoản thứ ba **không** được thấy); đóng ticket (transcript `.txt` vào `🧾-log-ticket`); nhắn tin rồi gõ `!rank`.
+4. Kiểm thử bằng tài khoản phụ: chọn English → chỉ thấy kênh tiếng Anh; xác minh; đổi sang Tiếng Việt → thấy kênh tiếng Việt, vẫn đã xác minh; mở ticket (tài khoản thứ ba **không** được thấy); đóng ticket (transcript `.txt` vào `🧾-log-ticket`); nhắn tin rồi gõ `!rank`; staff `!themcode TEST -` → thấy thông báo ở 2 kênh giftcode, tài khoản phụ gõ `!code` → nhận tin nhắn riêng, rồi `!xoacode TEST`.
 
 ## Chưa kiểm chứng
 Code đã qua kiểm tra cú pháp, logic phân quyền xem theo ngôn ngữ, đổi ngôn ngữ, cập nhật bài và đếm cấp bậc trên dữ liệu giả lập, nhưng **chưa chạy thử trên Discord thật**. Hãy thử trên một server test trước khi dùng cho server chính.

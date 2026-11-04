@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-NINJA WAR - DISCORD SERVER BUILDER (v5 · Tối ưu hiệu năng & Chống lỗi bấm đúp)
+NINJA WAR - DISCORD SERVER BUILDER (v6 · thêm lệnh !code xem giftcode)
 ==============================================================================
 Cách dùng nhanh:
   1. pip install -r requirements.txt        (discord.py>=2.4, python-dotenv)
@@ -20,8 +20,13 @@ Cơ chế ngôn ngữ:
   - Tự động đồng bộ lại cả slowmode_delay của các kênh cũ khi chạy lại !xaykenh.
   - Tự động giới hạn an toàn 2000 ký tự khi đăng/sửa bài mẫu, tránh lỗi văng giữa chừng.
   - Bật Server Members Intent giúp lệnh !rank @user tra cứu chính xác mọi thành viên.
+Điểm mới bản v6:
+  - !code: bot gửi tin nhắn riêng danh sách giftcode còn hạn cho người gõ lệnh.
+  - !themcode / !xoacode: staff thêm, xóa giftcode; bot tự đăng code mới ở kênh giftcode.
+  - Tin nhắn lệnh (bắt đầu bằng "!") không còn được tính vào cấp bậc.
 """
 import asyncio
+import datetime as dt
 import io
 import logging
 import os
@@ -92,7 +97,8 @@ MSG_TAIGAME = (
 )
 MSG_GIFTCODE = (
     "# 🎁 GIFTCODE\n"
-    "Staff đăng code mới tại đây. Bật role 🔔 Ping Giftcode ở `✅-xác-minh` để được báo."
+    "Staff đăng code mới tại đây. Bật role 🔔 Ping Giftcode ở `✅-xác-minh` để được báo.\n"
+    "> Gõ `!code` ở kênh chat bất kỳ, bot sẽ gửi riêng cho bạn danh sách code còn hạn."
 )
 MSG_NAPTHE = (
     "# 💎 QUY ĐỊNH NẠP THẺ\n"
@@ -166,7 +172,8 @@ EN_DOWNLOAD = (
 )
 EN_GIFTCODE = (
     "# 🎁 GIFT CODES\n"
-    "New gift codes are posted here. Turn on 🔔 notifications in `✅-verify` to get pinged."
+    "New gift codes are posted here. Turn on 🔔 notifications in `✅-verify` to get pinged.\n"
+    "> Type `!code` in any chat channel and the bot will DM you every active code."
 )
 EN_TOPUP = (
     "# 💎 TOP-UP RULES\n"
@@ -272,6 +279,13 @@ TXT = {
         "next": "⏭️ Còn **{left}** tin nhắn nữa để lên **{rank}**", "max": "🏆 Đã đạt cấp cao nhất!",
         "top_title": "# 🏆 BẢNG XẾP HẠNG NHẪN GIẢ", "top_empty": "Chưa có ai trên bảng xếp hạng.",
         "academy": "Học Viên", "unit": "tin nhắn",
+        "code_title": "# 🎁 GIFTCODE ĐANG HOẠT ĐỘNG",
+        "code_none": "Hiện chưa có giftcode nào còn hạn. Bật 🔔 Ping Giftcode ở `✅-xác-minh` để được báo khi có code mới.",
+        "code_exp": "HSD: {d} (còn {n} ngày)", "code_today": "HSD: hết hôm nay", "code_noexp": "không thời hạn",
+        "code_foot": "> Chạm giữ vào code để sao chép.",
+        "code_sent": "📬 {user} bot đã gửi danh sách giftcode vào tin nhắn riêng của bạn.",
+        "code_dm_fail": "⚠️ {user} bot không gửi tin nhắn riêng cho bạn được. Hãy bật **Tin nhắn trực tiếp** từ thành viên server (Cài đặt quyền riêng tư của server) rồi gõ lại `!code`.",
+        "code_new": "🔔 {ping} **Giftcode mới:** `{code}`{reward}\n⏳ {exp}\n> Gõ `!code` ở kênh chat để xem tất cả code còn hạn.",
     },
     "en": {
         "lang_set": "🇬🇧 **English** selected. Go to `✅-verify` to get started!",
@@ -294,6 +308,13 @@ TXT = {
         "next": "⏭️ **{left}** more messages to reach **{rank}**", "max": "🏆 Highest rank reached!",
         "top_title": "# 🏆 LEADERBOARD", "top_empty": "The leaderboard is empty.",
         "academy": "Academy", "unit": "messages",
+        "code_title": "# 🎁 ACTIVE GIFT CODES",
+        "code_none": "There are no active gift codes right now. Turn on 🔔 notifications in `✅-verify` to get pinged for new ones.",
+        "code_exp": "Expires: {d} ({n} days left)", "code_today": "Expires: end of today", "code_noexp": "no expiry",
+        "code_foot": "> Long-press a code to copy it.",
+        "code_sent": "📬 {user} the gift code list is in your DMs.",
+        "code_dm_fail": "⚠️ {user} the bot can't DM you. Turn on **Direct Messages** from server members (server Privacy Settings) and type `!code` again.",
+        "code_new": "🔔 {ping} **New gift code:** `{code}`{reward}\n⏳ {exp}\n> Type `!code` in a chat channel to see every active code.",
     },
 }
 
@@ -463,6 +484,9 @@ CH_PANEL = {"vi": "🎫-mở-ticket", "en": "🎫-open-ticket"}
 TICKET_CAT = {"vi": "tickets", "en": "en_tickets"}  # danh mục chứa phòng ticket theo ngôn ngữ
 CH_LOG = "🧾-log-ticket"
 STAFF_KEYS = ("hokage", "anbu", "support")  # role được thấy và đóng mọi ticket
+GIFT_ADMIN_KEYS = ("hokage", "dev", "anbu")   # role được thêm/xóa giftcode (chủ server luôn được)
+CH_GIFT = {"vi": "🎁-giftcode", "en": "🎁-gift-codes"}  # nơi bot tự đăng code mới
+GAME_TZ = dt.timezone(dt.timedelta(hours=7))   # giờ Việt Nam: code hết hạn lúc 23:59 ngày HSD
 
 
 # =====================================================================
@@ -943,6 +967,14 @@ async def on_ready():
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
+    if isinstance(error, commands.CommandOnCooldown):
+        return await ctx.send(f"⏳ Đợi {error.retry_after:.0f} giây rồi thử lại.", delete_after=5)
+    if isinstance(error, NotGiftAdmin):
+        return await ctx.send("⛔ Chỉ chủ server, Hokage, Dev hoặc Anbu mới quản lý giftcode được.")
+    if isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)) and ctx.command \
+            and ctx.command.name in ("themcode", "xoacode"):
+        return await ctx.send(f"⚠️ Sai cú pháp. Dùng: `{ctx.prefix}{ctx.command.name} {ctx.command.signature}`\n"
+                              "Ví dụ: `!themcode NINJA2026 31/12/2026 Kim cương x100 | 100 Diamonds`")
     if isinstance(error, commands.CheckFailure):
         return await ctx.send("⛔ Lệnh này chỉ **chủ server** dùng được, và chỉ trong server.")
     if isinstance(error, commands.MemberNotFound):
@@ -1138,6 +1170,8 @@ async def on_message(message):
     await bot.process_commands(message)
     if message.author.bot or message.guild is None:
         return
+    if message.content.startswith(bot.command_prefix):  # lệnh như !code, !rank không tính cấp bậc
+        return
     if len(message.content.strip()) < MIN_LEN:
         return
     if not in_counted_category(message.channel):
@@ -1201,6 +1235,202 @@ async def top_cmd(ctx: commands.Context):
     lines = [f"{medals[i]} <@{uid}> · {(rank_for(cnt) or (0, 0, t['academy']))[2]} · {cnt} {t['unit']}"
              for i, (uid, cnt) in enumerate(rows)]
     await ctx.send(t["top_title"] + "\n" + "\n".join(lines), allowed_mentions=discord.AllowedMentions.none())
+
+
+# =====================================================================
+# 6. GIFTCODE: !code (ai cũng dùng), !themcode / !xoacode (staff)
+# =====================================================================
+db.execute(
+    "CREATE TABLE IF NOT EXISTS giftcodes ("
+    "guild_id INTEGER, code TEXT COLLATE NOCASE, reward TEXT DEFAULT '', expires TEXT, "
+    "added_by INTEGER, added_at REAL, PRIMARY KEY (guild_id, code))")
+db.commit()
+
+NO_EXPIRY_WORDS = {"-", "0", "khong", "không", "none", "vinhvien", "vĩnhviễn"}
+
+
+class NotGiftAdmin(commands.CheckFailure):
+    pass
+
+
+def gift_admin():
+    async def predicate(ctx):
+        if ctx.guild is None:
+            raise NotGiftAdmin()
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+        roles = [find_role(ctx.guild, k) for k in GIFT_ADMIN_KEYS]
+        if any(r in ctx.author.roles for r in roles if r):
+            return True
+        raise NotGiftAdmin()
+    return commands.check(predicate)
+
+
+def game_today() -> dt.date:
+    return dt.datetime.now(GAME_TZ).date()
+
+
+def parse_expiry(text: str):
+    """'31/12/2026', '31-12-2026', '2026-12-31', '31/12' (năm nay/năm sau) hoặc '-' (không hạn).
+    Trả về (ngày hoặc None, True nếu hiểu được)."""
+    t = text.strip().lower()
+    if t in NO_EXPIRY_WORDS:
+        return None, True
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+        try:
+            return dt.datetime.strptime(t, fmt).date(), True
+        except ValueError:
+            pass
+    try:
+        d = dt.datetime.strptime(t, "%d/%m").date().replace(year=game_today().year)
+        if d < game_today():
+            d = d.replace(year=d.year + 1)
+        return d, True
+    except ValueError:
+        return None, False
+
+
+def split_reward(reward: str, lang: str) -> str:
+    """Phần thưởng dạng 'Tiếng Việt | English' -> lấy phần đúng ngôn ngữ."""
+    if "|" not in reward:
+        return reward.strip()
+    vi, en = (x.strip() for x in reward.split("|", 1))
+    return (en or vi) if lang == "en" else (vi or en)
+
+
+def expiry_text(expires, t) -> str:
+    if not expires:
+        return t["code_noexp"]
+    d = dt.date.fromisoformat(expires)
+    left = (d - game_today()).days
+    return t["code_today"] if left <= 0 else t["code_exp"].format(d=d.strftime("%d/%m/%Y"), n=left)
+
+
+def active_codes(guild_id: int):
+    today = game_today().isoformat()
+    # dọn code đã hết hạn quá 30 ngày cho gọn
+    db.execute("DELETE FROM giftcodes WHERE expires IS NOT NULL AND expires < ?",
+               ((game_today() - dt.timedelta(days=30)).isoformat(),))
+    db.commit()
+    return db.execute(
+        "SELECT code, reward, expires FROM giftcodes WHERE guild_id=? AND (expires IS NULL OR expires >= ?) "
+        "ORDER BY expires IS NULL, expires, added_at DESC", (guild_id, today)).fetchall()
+
+
+def code_messages(rows, lang: str) -> list[str]:
+    """Danh sách code thành các tin nhắn <= 2000 ký tự."""
+    t = TXT[lang]
+    if not rows:
+        return [t["code_none"]]
+    lines = []
+    for code, reward, expires in rows:
+        r = split_reward(reward or "", lang)
+        lines.append(f"🎁 `{code}`" + (f" · {r}" if r else "") + f"\n   ⏳ {expiry_text(expires, t)}")
+    msgs, cur = [], t["code_title"]
+    for line in lines + [t["code_foot"]]:
+        if len(cur) + len(line) + 1 > 1900:
+            msgs.append(cur)
+            cur = line
+        else:
+            cur += "\n" + line
+    msgs.append(cur)
+    return msgs
+
+
+def gift_context(ctx):
+    """(guild, lang) cho lệnh !code, kể cả khi gõ trong tin nhắn riêng với bot."""
+    if ctx.guild is not None:
+        return ctx.guild, cmd_lang(ctx)
+    for g in bot.guilds:
+        m = g.get_member(ctx.author.id)
+        if m is not None:
+            return g, member_lang(g, m)
+    return None, "vi"
+
+
+@bot.command(name="code", aliases=["codes", "giftcode"])
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def code_cmd(ctx: commands.Context):
+    """Gửi tin nhắn riêng danh sách giftcode còn hạn."""
+    guild, lang = gift_context(ctx)
+    t = TXT[lang]
+    msgs = code_messages(active_codes(guild.id) if guild else [], lang)
+    if ctx.guild is None:  # đang ở tin nhắn riêng: trả lời luôn
+        for m in msgs:
+            await ctx.send(m)
+        return
+    try:
+        await ctx.message.delete()  # xóa lệnh cho kênh chat gọn
+    except discord.HTTPException:
+        pass
+    try:
+        for m in msgs:
+            await ctx.author.send(m)
+    except discord.Forbidden:
+        return await ctx.send(t["code_dm_fail"].format(user=ctx.author.mention), delete_after=20,
+                              allowed_mentions=discord.AllowedMentions(users=[ctx.author]))
+    await ctx.send(t["code_sent"].format(user=ctx.author.mention), delete_after=8,
+                   allowed_mentions=discord.AllowedMentions(users=[ctx.author]))
+
+
+@bot.command(name="themcode", aliases=["addcode"])
+@commands.guild_only()
+@gift_admin()
+async def themcode(ctx: commands.Context, code: str, han: str = "-", *, phan_thuong: str = ""):
+    """Thêm giftcode. Ví dụ: !themcode NINJA2026 31/12/2026 Kim cương x100 | 100 Diamonds"""
+    code = code.strip()
+    if not code or len(code) > 64 or "`" in code:
+        return await ctx.send("⚠️ Code không hợp lệ (tối đa 64 ký tự, không chứa dấu `).")
+    expires, ok = parse_expiry(han)
+    if not ok:  # không ghi hạn: chữ thứ hai là phần thưởng
+        phan_thuong = f"{han} {phan_thuong}".strip()
+    if expires and expires < game_today():
+        return await ctx.send(f"⚠️ Ngày hết hạn {expires.strftime('%d/%m/%Y')} đã qua.")
+    existed = db.execute("SELECT 1 FROM giftcodes WHERE guild_id=? AND code=?", (ctx.guild.id, code)).fetchone()
+    db.execute("INSERT OR REPLACE INTO giftcodes (guild_id, code, reward, expires, added_by, added_at) "
+               "VALUES (?,?,?,?,?,?)",
+               (ctx.guild.id, code, phan_thuong, expires.isoformat() if expires else None,
+                ctx.author.id, time.time()))
+    db.commit()
+
+    exp_vi = expiry_text(expires.isoformat() if expires else None, TXT["vi"])
+    done = []
+    if not existed:  # chỉ thông báo code mới, sửa code cũ thì không ping lại
+        ping_role = find_role(ctx.guild, "ping_gift")
+        for lang, ch_name in CH_GIFT.items():
+            ch = find_text_channel(ctx.guild, ch_name)
+            if ch is None:
+                continue
+            t = TXT[lang]
+            r = split_reward(phan_thuong, lang)
+            try:
+                await ch.send(
+                    t["code_new"].format(ping=ping_role.mention if ping_role else "", code=code,
+                                         reward=f"\n🎁 {r}" if r else "",
+                                         exp=expiry_text(expires.isoformat() if expires else None, t)),
+                    allowed_mentions=discord.AllowedMentions(roles=[ping_role] if ping_role else []))
+                done.append(ch.mention)
+            except discord.HTTPException as e:
+                log.warning("Không đăng được giftcode ở %s: %s", ch_name, e)
+    msg = f"✅ {'Đã cập nhật' if existed else 'Đã thêm'} code `{code}` · {exp_vi}"
+    if phan_thuong:
+        msg += f" · {phan_thuong}"
+    if done:
+        msg += f"\n📢 Đã thông báo ở {', '.join(done)}."
+    await ctx.send(msg, allowed_mentions=discord.AllowedMentions.none())
+
+
+@bot.command(name="xoacode", aliases=["delcode"])
+@commands.guild_only()
+@gift_admin()
+async def xoacode(ctx: commands.Context, code: str):
+    """Xóa giftcode khỏi danh sách !code."""
+    cur = db.execute("DELETE FROM giftcodes WHERE guild_id=? AND code=?", (ctx.guild.id, code.strip()))
+    db.commit()
+    if cur.rowcount:
+        await ctx.send(f"🗑️ Đã xóa code `{code}`.", allowed_mentions=discord.AllowedMentions.none())
+    else:
+        await ctx.send(f"⚠️ Không có code `{code}` trong danh sách.", allowed_mentions=discord.AllowedMentions.none())
 
 
 @bot.command(name="taoticket")
