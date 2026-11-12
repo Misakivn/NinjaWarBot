@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ninja War: xem trước server sau khi chạy bot</title>
+<style>
+:root{--bg0:#16181d;--bg1:#1d2027;--bg2:#252932;--bg3:#2f343f;--line:#343a46;--tx:#e6e8ec;--tx2:#a3a9b5;--tx3:#737a88;--acc:#5b7cfa;--ok:#2f9e60;--bad:#d9434e;--sec:#4a505c}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg0);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;display:flex;flex-direction:column}
+.note{background:#3a3112;color:#f3dc8b;font-size:13px;padding:6px 14px;border-bottom:1px solid #5a4b17}
+.app{flex:1;min-height:0;display:grid;grid-template-columns:270px 1fr 230px}
+aside,.roles{background:var(--bg1);overflow-y:auto;min-height:0}
+.srv{padding:14px 14px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg1);z-index:2}
+.srv h1{font-size:16px;margin:0 0 10px}
+.srv label{display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:4px}
+select{width:100%;background:var(--bg3);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit;font-size:13px}
+.cat{font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--tx3);padding:16px 12px 4px;text-transform:uppercase}
+.ch{display:flex;align-items:center;gap:6px;width:calc(100% - 16px);margin:1px 8px;padding:6px 8px;border:0;border-radius:6px;background:none;color:var(--tx2);font:inherit;text-align:left;cursor:pointer}
+.ch:hover{background:var(--bg2);color:var(--tx)}
+.ch.on{background:var(--bg3);color:#fff}
+.ch .i{flex:none;width:16px;text-align:center;color:var(--tx3);font-weight:700}
+.ch .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch .lock{font-size:11px;color:var(--tx3)}
+.ch.voice{cursor:default}
+main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg2)}
+.top{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--line)}
+.top .menu{display:none;background:var(--bg3);color:var(--tx);border:0;border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+.top b{font-size:15.5px}
+.top span{color:var(--tx3);font-size:13px}
+.msgs{flex:1;overflow-y:auto;padding:18px 16px}
+.m{display:flex;gap:12px;margin-bottom:18px}
+.av{flex:none;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#f0803c,#c2362f);display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff}
+.hd{font-weight:600}.hd i{font-style:normal;background:var(--acc);color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.hd small{color:var(--tx3);font-weight:400;margin-left:8px;font-size:12px}
+.body{overflow-wrap:anywhere}
+.body h3{font-size:20px;margin:4px 0 6px}
+.body p{margin:2px 0}
+.body blockquote{margin:6px 0;padding:2px 0 2px 10px;border-left:4px solid var(--sec);color:var(--tx)}
+.body ul{margin:4px 0;padding-left:22px}
+.body code{background:var(--bg0);border-radius:4px;padding:1px 5px;font-size:13px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.btn{border:0;border-radius:6px;padding:8px 14px;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--acc)}.btn.success{background:var(--ok)}.btn.danger{background:var(--bad)}.btn.secondary{background:var(--sec)}
+.empty{color:var(--tx3);text-align:center;margin-top:40px}
+.bar{margin:0 16px 16px;padding:11px 14px;border-radius:8px;background:var(--bg3);color:var(--tx3);font-size:14px}
+.bar.can{color:var(--tx2)}
+.roles{padding:6px 0 20px;border-left:1px solid var(--line)}
+.roles h2{font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--tx3);padding:14px 14px 6px;margin:0}
+.role{display:flex;align-items:center;gap:8px;padding:4px 14px;font-size:13.5px}
+.role i{flex:none;width:10px;height:10px;border-radius:50%}
+.role small{color:var(--tx3);margin-left:auto;font-size:11px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#000;color:#fff;padding:9px 16px;border-radius:8px;font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:.92}
+@media(max-width:1000px){.app{grid-template-columns:250px 1fr}.roles{display:none}}
+@media(max-width:700px){.app{grid-template-columns:1fr}aside{display:none;position:fixed;inset:0;z-index:5}aside.open{display:block}.top .menu{display:block}}
+</style>
+</head>
+<body>
+<div class="note">Bản xem trước mô phỏng, dựng từ cấu hình thật của bot v7 (kênh, role, bài đăng, nút). Đây không phải Discord thật nên các nút không thực hiện thao tác.</div>
+<div class="app">
+  <aside id="side">
+    <div class="srv">
+      <h1>⚔️ Ninja War</h1>
+      <label for="who">Xem với vai trò</label>
+      <select id="who"></select>
+    </div>
+    <nav id="nav"></nav>
+  </aside>
+  <main>
+    <div class="top"><button class="menu" id="menu">☰ Kênh</button><b id="title"></b><span id="sub"></span></div>
+    <div class="msgs" id="msgs"></div>
+    <div class="bar" id="bar"></div>
+  </main>
+  <div class="roles"><h2>Role bot tạo (cao → thấp)</h2><div id="roles"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const DATA = {"cats": [{"name": "🌐 NGÔN NGỮ · LANGUAGE", "lang": null, "access": "open", "channels": [{"name": "🌐-ngôn-ngữ-language", "kind": "text", "access": "open", "slow": 0, "msgs": [{"text": "# 🌐 NGÔN NGỮ · LANGUAGE\n🇻🇳 Chọn ngôn ngữ để mở các kênh của bạn. Bấm nút kia để đổi bất cứ lúc nào.\n🇬🇧 Choose your language to unlock your channels. Press the other button to switch any time.", "buttons": [{"emoji": "🇻🇳", "label": "Tiếng Việt", "style": "primary"}, {"emoji": "🇬🇧", "label": "English", "style": "primary"}]}]}]}, {"name": "📌 THÔNG TIN QUAN TRỌNG", "lang": "vi", "access": "info", "channels": [{"name": "✅-xác-minh", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# ✅ XÁC MINH NHẪN GIẢ\nĐọc kỹ `📜-nội-quy`, rồi bấm nút bên dưới để mở khóa toàn bộ kênh chat.\n> ⚠️ Staff **không bao giờ** nhắn riêng trước hay hỏi mật khẩu/OTP.", "buttons": [{"emoji": "✅", "label": "Tôi đã đọc luật - Vào Làng Lá", "style": "success"}]}, {"text": "# 🔔 NHẬN THÔNG BÁO\nBấm để bật/tắt role nhắc nhở (bấm lần nữa để gỡ). Cần xác minh trước.", "buttons": [{"emoji": "🔔", "label": "Báo Giftcode", "style": "secondary"}, {"emoji": "⏰", "label": "Báo Hoạt động", "style": "secondary"}]}]}, {"name": "📜-nội-quy", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📜 NỘI QUY LÀNG LÁ\n1. Tôn trọng mọi người: không chửi bới, kỳ thị, công kích cá nhân.\n2. Cấm quảng cáo server/game khác, cấm spam, cấm gửi link lạ.\n3. Cấm lợi dụng lỗi (bug) game. Gặp lỗi hãy báo tại `🐛-báo-lỗi-game`.\n4. Vấn đề nạp thẻ/tài khoản chỉ xử lý qua Ticket, không nhờ staff qua tin nhắn riêng.\n5. Quyết định của Anbu/Hokage là quyết định cuối cùng.\n> Vi phạm: nhắc nhở → timeout → ban.", "buttons": []}]}, {"name": "📢-thông-báo", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📢 THÔNG BÁO\nCập nhật phiên bản, bảo trì và sự kiện sẽ được đăng tại đây.", "buttons": []}]}, {"name": "📅-lịch-sự-kiện", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📅 LỊCH HOẠT ĐỘNG (GIỜ VN · GMT+7)\n* **20:00** – Chốt bảng xếp hạng Tranh Bá\n* **20:30** – Phát thư thưởng\n* **Khóa đấu trường:** 20:00–21:00 và 23:00–07:00", "buttons": []}]}, {"name": "📥-tải-game", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📥 TẢI GAME\n* 🤖 Android: _(staff cập nhật link)_\n* 🍎 iOS: _(staff cập nhật link)_\n> Chỉ tải từ link đăng tại kênh này. Link ở nơi khác có thể là lừa đảo.", "buttons": []}]}, {"name": "🎁-giftcode", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 🎁 GIFTCODE\nStaff đăng code mới tại đây. Bật role 🔔 Ping Giftcode ở `✅-xác-minh` để được báo.\n> Gõ `!code` ở kênh chat bất kỳ, bot sẽ gửi riêng cho bạn danh sách code còn hạn.", "buttons": []}]}, {"name": "💎-quy-định-nạp-thẻ", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 💎 QUY ĐỊNH NẠP THẺ\n1. Chỉ nạp qua Ticket tại `🎫-mở-ticket`. Staff không nhận nạp qua tin nhắn riêng.\n2. Chuẩn bị: tên nhân vật, server, gói nạp, ảnh biên lai.\n3. Chỉ chuyển khoản vào tài khoản staff gửi **trong Ticket**. Thông tin thanh toán không đăng công khai.\n> ⚠️ Giao dịch ngoài Ticket sẽ không được hỗ trợ.", "buttons": []}]}, {"name": "⚠️-chống-lừa-đảo", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# ⚠️ CHỐNG LỪA ĐẢO\n* Staff **không bao giờ** nhắn riêng trước hoặc hỏi mật khẩu/OTP/mã xác minh.\n* Staff thật có role 👑 Hokage / 🛡️ Anbu / 💳 Hỗ Trợ Viên.\n* Không bấm link lạ, không tải APK ngoài `📥-tải-game`.\n* Gặp kẻ mạo danh: chụp ảnh và báo qua Ticket.", "buttons": []}]}]}, {"name": "⛩️ HỌC VIỆN LÀNG LÁ", "lang": "vi", "access": "members_info", "channels": [{"name": "🏫-học-viện-nhẫn-giả", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🏫 **[HỌC VIỆN NHẪN GIẢ]** Giáo trình tân thủ, mẹo vượt tháp, cách dùng bí kíp và tối ưu tài nguyên.", "buttons": []}]}, {"name": "🗺️-bản-đồ-làng-lá", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🗺️ **[BẢN ĐỒ LÀNG LÁ]** Lộ trình thăng cấp và mốc thời gian các hoạt động quan trọng.", "buttons": []}]}, {"name": "📚-nhẫn-giả-thư-viện", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "📚 **[NHẪN GIẢ THƯ VIỆN]** Đánh giá kỹ năng tướng, phân tích sức mạnh và công thức đội hình công/thủ.", "buttons": []}]}]}, {"name": "🏯 CƠ QUAN PHÁT TRIỂN", "lang": "vi", "access": "members_info", "channels": [{"name": "📖-nhật-ký-cấm-thuật", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "📖 **[NHẬT KÝ CẤM THUẬT]** Cập nhật phiên bản, sửa lỗi và cân bằng chỉ số game.", "buttons": []}]}, {"name": "🧪-phòng-thí-nghiệm", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🧪 **[PHÒNG THÍ NGHIỆM]** Hé lộ tính năng, tướng mới và bản thử nghiệm trước khi cập nhật chính thức.", "buttons": []}]}, {"name": "🏛️-hội-đồng-làng-lá", "kind": "text", "access": "members_chat", "slow": 10, "msgs": [{"text": "🏛️ **[HỘI ĐỒNG LÀNG LÁ]** Góp ý tính năng và biểu quyết cùng cộng đồng.", "buttons": []}]}]}, {"name": "🛠️ KHU VỰC HỖ TRỢ", "lang": "vi", "access": "members_chat", "channels": [{"name": "🎫-mở-ticket", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "# 🎫 HỖ TRỢ 1-1\nBấm nút bên dưới để mở phòng riêng với staff: nạp thẻ, mất tài khoản, lỗi nghiêm trọng.", "buttons": [{"emoji": "💳", "label": "Nạp thẻ", "style": "success"}, {"emoji": "🆘", "label": "Hỗ trợ", "style": "primary"}]}]}, {"name": "🐛-báo-lỗi-game", "kind": "text", "access": "members_chat", "slow": 30, "msgs": [{"text": "# 🐛 BÁO LỖI\nMẫu: **Thiết bị** (Android/iOS) · **Tính năng** · **Các bước tái hiện** · **Ảnh/video**.", "buttons": []}]}, {"name": "❓-hỏi-đáp", "kind": "text", "access": "members_chat", "slow": 10, "msgs": [{"text": "# ❓ HỎI ĐÁP\nHỏi về cách chơi, đội hình, tính năng. Hãy tìm trong kênh trước khi hỏi nhé!", "buttons": []}]}]}, {"name": "💬 CỘNG ĐỒNG NHẪN GIẢ", "lang": "vi", "access": "members_chat", "channels": [{"name": "💬-sảnh-nhẫn-giả", "kind": "text", "access": "members_chat", "slow": 5, "msgs": []}, {"name": "⚔️-bàn-luận-đội-hình", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "📸-khoe-nhân-phẩm", "kind": "text", "access": "members_chat", "slow": 10, "msgs": []}, {"name": "🏆-tranh-bá-xếp-hạng", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "🏯-tìm-guild", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "🛒-giao-dịch", "kind": "text", "access": "members_chat", "slow": 30, "msgs": [{"text": "# 🛒 GIAO DỊCH\n> ⚠️ Không chuyển tiền trước cho người lạ. Staff không chịu trách nhiệm cho giao dịch giữa người chơi.", "buttons": []}]}]}, {"name": "🔊 ĐÀM ĐẠO & CANH GIỜ", "lang": "vi", "access": "members_chat", "channels": [{"name": "🔊 Đàm Đạo Chung", "kind": "voice", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "⚔️ Canh Giờ Chốt Hạng", "kind": "voice", "access": "members_chat", "slow": 0, "msgs": []}]}, {"name": "📌 INFORMATION", "lang": "en", "access": "info", "channels": [{"name": "✅-verify", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# ✅ VERIFY\nRead `📜-rules`, then press the button below to unlock all chat channels.\n> ⚠️ Staff will **never** DM you first or ask for your password/OTP.", "buttons": [{"emoji": "✅", "label": "I've read the rules", "style": "success"}]}, {"text": "# 🔔 NOTIFICATIONS\nPress to get pinged for new gift codes or events (press again to stop). Verify first.", "buttons": [{"emoji": "🔔", "label": "Gift codes", "style": "secondary"}, {"emoji": "⏰", "label": "Events", "style": "secondary"}]}]}, {"name": "📜-rules", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📜 SERVER RULES\n1. Be respectful: no insults, hate speech or personal attacks.\n2. No advertising other servers/games, no spam, no unknown links.\n3. Don't exploit game bugs. Report them in `🐛-bug-reports`.\n4. Top-up and account issues are handled only through tickets, never by DM.\n5. Staff decisions (Anbu/Hokage) are final.\n> Penalties: warning → timeout → ban.", "buttons": []}]}, {"name": "📢-announcements", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📢 ANNOUNCEMENTS\nGame updates, maintenance and events are posted here.", "buttons": []}]}, {"name": "📅-schedule", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📅 SCHEDULE (VIETNAM TIME · UTC+7)\n* **20:00** – Arena ranking closes\n* **20:30** – Rewards sent by mail\n* **Arena locked:** 20:00–21:00 and 23:00–07:00\n> All times are Vietnam time (UTC+7). Please convert to your own time zone.", "buttons": []}]}, {"name": "📥-download", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 📥 DOWNLOAD\n* 🤖 Android: _(link coming soon)_\n* 🍎 iOS: _(link coming soon)_\n> Only download from the links in this channel. Links anywhere else may be scams.", "buttons": []}]}, {"name": "🎁-gift-codes", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 🎁 GIFT CODES\nNew gift codes are posted here. Turn on 🔔 notifications in `✅-verify` to get pinged.\n> Type `!code` in any chat channel and the bot will DM you every active code.", "buttons": []}]}, {"name": "💎-top-up-rules", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# 💎 TOP-UP RULES\n1. Top up only through a ticket in `🎫-open-ticket`. Staff never accept top-ups by DM.\n2. Have ready: character name, server, package and payment receipt.\n3. Only pay to the details staff send **inside your ticket**. Payment details are never posted publicly.\n> ⚠️ Payments made outside a ticket cannot be supported.", "buttons": []}]}, {"name": "⚠️-anti-scam", "kind": "text", "access": "info", "slow": 0, "msgs": [{"text": "# ⚠️ ANTI-SCAM\n* Staff will **never** DM you first or ask for your password, OTP or verification code.\n* Real staff have the 👑 Hokage, 🛡️ Anbu or 💳 Hỗ Trợ Viên (support) role.\n* Don't click unknown links or install APKs from anywhere except `📥-download`.\n* Found an impersonator? Take a screenshot and report it in a ticket.", "buttons": []}]}]}, {"name": "⛩️ LEAF VILLAGE ACADEMY", "lang": "en", "access": "members_info", "channels": [{"name": "🏫-beginner-guide", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🏫 **[ACADEMY]** Beginner guides, tower tips, skill books and resource planning.", "buttons": []}]}, {"name": "🗺️-roadmap", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🗺️ **[ROADMAP]** Levelling path and the timing of key activities.", "buttons": []}]}, {"name": "📚-hero-library", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "📚 **[HERO LIBRARY]** Hero skill reviews, power analysis and attack/defence team builds.", "buttons": []}]}]}, {"name": "🏯 DEVELOPMENT", "lang": "en", "access": "members_info", "channels": [{"name": "📖-patch-notes", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "📖 **[PATCH NOTES]** Version updates, bug fixes and balance changes.", "buttons": []}]}, {"name": "🧪-sneak-peeks", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "🧪 **[SNEAK PEEKS]** New features, new heroes and test builds before official release.", "buttons": []}]}, {"name": "🏛️-council", "kind": "text", "access": "members_chat", "slow": 10, "msgs": [{"text": "🏛️ **[COUNCIL]** Suggest features and vote with the community.", "buttons": []}]}]}, {"name": "🛠️ SUPPORT", "lang": "en", "access": "members_chat", "channels": [{"name": "🎫-open-ticket", "kind": "text", "access": "members_info", "slow": 0, "msgs": [{"text": "# 🎫 PRIVATE SUPPORT\nPress a button below to open a private room with staff: top-up, lost account or serious bugs.\n> Staff may reply with a translator, so short, simple sentences help.", "buttons": [{"emoji": "💳", "label": "Top-up", "style": "success"}, {"emoji": "🆘", "label": "Support", "style": "primary"}]}]}, {"name": "🐛-bug-reports", "kind": "text", "access": "members_chat", "slow": 30, "msgs": [{"text": "# 🐛 BUG REPORTS\nTemplate: **Device** (Android/iOS) · **Feature** · **Steps to reproduce** · **Screenshot/video**.", "buttons": []}]}, {"name": "❓-help", "kind": "text", "access": "members_chat", "slow": 10, "msgs": [{"text": "# ❓ HELP\nQuestions about gameplay, teams and features. Please search the channel before asking!", "buttons": []}]}]}, {"name": "💬 SHINOBI COMMUNITY", "lang": "en", "access": "members_chat", "channels": [{"name": "💬-global-chat", "kind": "text", "access": "members_chat", "slow": 5, "msgs": []}, {"name": "⚔️-team-builds", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "📸-show-off", "kind": "text", "access": "members_chat", "slow": 10, "msgs": []}, {"name": "🏆-arena-rankings", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "🏯-find-a-guild", "kind": "text", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "🛒-trading", "kind": "text", "access": "members_chat", "slow": 30, "msgs": [{"text": "# 🛒 TRADING\n> ⚠️ Never pay strangers first. Staff are not responsible for trades between players.", "buttons": []}]}]}, {"name": "🔊 VOICE", "lang": "en", "access": "members_chat", "channels": [{"name": "🔊 Global Voice", "kind": "voice", "access": "members_chat", "slow": 0, "msgs": []}, {"name": "⚔️ Ranking Deadline", "kind": "voice", "access": "members_chat", "slow": 0, "msgs": []}]}, {"name": "🎫 TICKET ĐANG MỞ", "lang": null, "access": "staff", "channels": []}, {"name": "🎫 OPEN TICKETS", "lang": null, "access": "staff", "channels": []}, {"name": "🔒 HOKAGE · BAN QUẢN TRỊ", "lang": null, "access": "staff", "channels": [{"name": "💬-staff-chat", "kind": "text", "access": "staff", "slow": 0, "msgs": []}, {"name": "🧾-log-ticket", "kind": "text", "access": "staff", "slow": 0, "msgs": []}, {"name": "🚨-log-moderation", "kind": "text", "access": "staff", "slow": 0, "msgs": []}]}], "roles": [{"name": "👑 Hokage (Admin)", "color": "#FF2A2A", "hoist": true}, {"name": "🔧 Dev Shinobi", "color": "#9B59B6", "hoist": true}, {"name": "🛡️ Anbu (Moderator)", "color": "#3498DB", "hoist": true}, {"name": "💳 Hỗ Trợ Viên", "color": "#E91E63", "hoist": true}, {"name": "💎 Đại Gia Làng Lá (VIP)", "color": "#F1C40F", "hoist": true}, {"name": "🏆 Tam Nhẫn Bảng XH", "color": "#E67E22", "hoist": true}, {"name": "🧠 Quân Sư Nhẫn Giả", "color": "#1ABC9C", "hoist": true}, {"name": "🐍 Sannin", "color": "#F5B041", "hoist": false}, {"name": "🔥 Jonin", "color": "#AF7AC5", "hoist": false}, {"name": "⚔️ Chunin", "color": "#5DADE2", "hoist": false}, {"name": "🥋 Genin", "color": "#BDC3C7", "hoist": false}, {"name": "🥷 Nhẫn Giả (Member)", "color": "#2ECC71", "hoist": true}, {"name": "🥷 Shinobi (Member)", "color": "#2ECC71", "hoist": true}, {"name": "🇻🇳 Tiếng Việt", "color": "#95A5A6", "hoist": false}, {"name": "🇬🇧 English", "color": "#95A5A6", "hoist": false}, {"name": "🔔 Ping Giftcode", "color": "#95A5A6", "hoist": false}, {"name": "⏰ Ping Event", "color": "#95A5A6", "hoist": false}], "tickets": {"nap": {"lang": "vi", "text": "💳 **TICKET NẠP THẺ**\nVui lòng gửi: **tên nhân vật**, **server**, **gói nạp** và **ảnh biên lai** (nếu đã chuyển).\n> ⚠️ Chỉ chuyển khoản theo thông tin staff gửi **trong ticket này**. Không chuyển cho bất kỳ ai nhắn riêng.", "buttons": [{"emoji": "🔒", "label": "Đóng ticket", "style": "danger"}]}, "hotro": {"lang": "vi", "text": "🆘 **TICKET HỖ TRỢ**\nHãy mô tả vấn đề: **tên nhân vật**, **thiết bị** (Android/iOS), chuyện gì xảy ra và **ảnh/video** nếu có.\n> ⚠️ Staff không bao giờ hỏi mật khẩu hoặc mã OTP.", "buttons": [{"emoji": "🔒", "label": "Đóng ticket", "style": "danger"}]}, "topup": {"lang": "en", "text": "💳 **TOP-UP TICKET**\nPlease send: **character name**, **server**, **package** and **receipt** (if already paid).\n> ⚠️ Only pay using the details staff send **in this ticket**. Never pay anyone who DMs you.", "buttons": [{"emoji": "🔒", "label": "Close ticket", "style": "danger"}]}, "support": {"lang": "en", "text": "🆘 **SUPPORT TICKET**\nDescribe the problem: **character name**, **device** (Android/iOS), what happened, and a **screenshot/video** if you have one.\n> ⚠️ Staff will never ask for your password or OTP.", "buttons": [{"emoji": "🔒", "label": "Close ticket", "style": "danger"}]}}};
+const WHO = [
+  ["new","Người mới vào (chưa chọn ngôn ngữ)"],
+  ["vi_lang","Đã chọn 🇻🇳 Tiếng Việt, chưa xác minh"],
+  ["vi_member","🥷 Nhẫn Giả (tiếng Việt, đã xác minh)"],
+  ["en_lang","Đã chọn 🇬🇧 English, chưa xác minh"],
+  ["en_member","🥷 Shinobi (tiếng Anh, đã xác minh)"],
+  ["support","💳 Hỗ Trợ Viên"],
+  ["staff","👑 Hokage / Dev / Anbu"]];
+const SAMPLE = {vi_member:["nap"], en_member:["topup"], support:["nap","topup"], staff:["nap","topup"]};
+let who = "new", cur = null;
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const isStaff = () => who === "staff" || who === "support";
+function canSee(access, lang){
+  if (access === "open" || isStaff()) return true;
+  const [l, lvl] = who === "new" ? [null, null] : who.split("_");
+  if (access === "info") return l === lang;
+  if (access === "members_info" || access === "members_chat") return l === lang && lvl === "member";
+  return false;
+}
+function canSend(access){
+  if (who === "staff") return true;
+  if (who === "support") return access === "members_chat" || access === "staff";
+  return access === "members_chat";
+}
+function inline(s){
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/_\(([^)]*)\)_/g, "<em>($1)</em>");
+}
+function md(text){
+  let out = "", list = false;
+  for (const line of text.split("\n")){
+    const li = line.startsWith("* ");
+    if (list && !li){ out += "</ul>"; list = false; }
+    if (line.startsWith("# ")) out += "<h3>" + inline(line.slice(2)) + "</h3>";
+    else if (line.startsWith("> ")) out += "<blockquote>" + inline(line.slice(2)) + "</blockquote>";
+    else if (li){ if (!list){ out += "<ul>"; list = true; } out += "<li>" + inline(line.slice(2)) + "</li>"; }
+    else out += "<p>" + inline(line) + "</p>";
+  }
+  return out + (list ? "</ul>" : "");
+}
+function tree(){
+  const cats = [];
+  for (const c of DATA.cats){
+    const chs = c.channels.filter(ch => canSee(ch.access, c.lang)).map(ch => ({...ch}));
+    const isTicketCat = c.access === "staff" && !c.channels.length;
+    if (isTicketCat){
+      const want = c.name.includes("OPEN") ? "topup" : "nap";
+      if ((SAMPLE[who] || []).includes(want)){
+        const t = DATA.tickets[want];
+        const mention = who.endsWith("member") ? "@Bạn" : "@NguoiChoi";
+        chs.push({name: want + "-nguoichoi", kind:"text", access:"ticket", slow:0, sample:true,
+                  msgs:[{text: mention + " @💳 Hỗ Trợ Viên\n" + t.text, buttons: t.buttons}]});
+      }
+    }
+    if (chs.length || (isStaff() && canSee(c.access, c.lang))) cats.push({name: c.name, chs});
+  }
+  return cats;
+}
+function render(){
+  const cats = tree(), flat = cats.flatMap(c => c.chs).filter(ch => ch.kind === "text");
+  if (!flat.some(ch => ch.name === cur)) cur = flat[0] ? flat[0].name : null;
+  const nav = $("nav"); nav.innerHTML = "";
+  for (const c of cats){
+    const h = document.createElement("div"); h.className = "cat"; h.textContent = c.name; nav.appendChild(h);
+    if (!c.chs.length){ const e = document.createElement("div"); e.className = "ch voice"; e.innerHTML = '<span class="i"></span><span class="n" style="color:var(--tx3)">(trống, chờ ticket mới)</span>'; nav.appendChild(e); }
+    for (const ch of c.chs){
+      const b = document.createElement(ch.kind === "voice" ? "div" : "button");
+      b.className = "ch" + (ch.kind === "voice" ? " voice" : "") + (ch.name === cur ? " on" : "");
+      b.innerHTML = '<span class="i">' + (ch.kind === "voice" ? "🔊" : "#") + '</span><span class="n">' + esc(ch.name) + '</span>' + (ch.sample ? '<span class="lock">ví dụ</span>' : "");
+      if (ch.kind !== "voice") b.onclick = () => { cur = ch.name; $("side").classList.remove("open"); render(); };
+      nav.appendChild(b);
+    }
+  }
+  const ch = flat.find(x => x.name === cur);
+  $("title").textContent = ch ? "# " + ch.name : "";
+  $("sub").textContent = ch && ch.slow ? "Chế độ chậm: " + ch.slow + " giây" : (ch && ch.sample ? "Phòng ticket ví dụ: chỉ người mở và staff nhìn thấy" : "");
+  const box = $("msgs"); box.innerHTML = "";
+  if (ch && ch.msgs.length){
+    for (const m of ch.msgs){
+      const d = document.createElement("div"); d.className = "m";
+      d.innerHTML = '<div class="av">NW</div><div><div class="hd">Ninja War Bot<i>BOT</i><small>bài đăng sẵn</small></div><div class="body">' + md(m.text) + '</div>' +
+        (m.buttons.length ? '<div class="btns">' + m.buttons.map(b => '<button class="btn ' + b.style + '">' + b.emoji + " " + esc(b.label) + '</button>').join("") + '</div>' : "") + '</div>';
+      box.appendChild(d);
+    }
+  } else if (ch){
+    const e = document.createElement("div"); e.className = "empty"; e.textContent = "Kênh trống. Bot không đăng bài sẵn ở đây, thành viên tự trò chuyện."; box.appendChild(e);
+  }
+  box.querySelectorAll(".btn").forEach(b => b.onclick = () => toast("Bản xem trước: nút này chỉ hoạt động trên Discord thật."));
+  const bar = $("bar"), send = ch && (ch.access === "ticket" || canSend(ch.access));
+  bar.className = "bar" + (send ? " can" : "");
+  bar.textContent = !ch ? "" : send ? "Nhắn tin vào #" + ch.name : "🔒 Vai trò này chỉ được đọc, không gửi tin nhắn trong kênh này.";
+  box.scrollTop = 0;
+}
+let tt; function toast(s){ const t = $("toast"); t.textContent = s; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 2200); }
+const sel = $("who");
+for (const [v, l] of WHO){ const o = document.createElement("option"); o.value = v; o.textContent = l; sel.appendChild(o); }
+sel.onchange = () => { who = sel.value; render(); };
+$("menu").onclick = () => $("side").classList.toggle("open");
+$("roles").innerHTML = DATA.roles.map(r => '<div class="role"><i style="background:' + r.color + '"></i>' + esc(r.name) + (r.hoist ? "<small>hiện riêng</small>" : "") + '</div>').join("");
+render();
+</script>
+</body>
+</html>
