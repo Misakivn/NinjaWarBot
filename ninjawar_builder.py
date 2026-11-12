@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-NINJA WAR - DISCORD SERVER BUILDER (v6 · thêm lệnh !code xem giftcode)
+NINJA WAR - DISCORD SERVER BUILDER (v7 · lưu biên lai ticket, nút bấm ổn định hơn)
 ==============================================================================
 Cách dùng nhanh:
-  1. pip install -r requirements.txt        (discord.py>=2.4, python-dotenv)
+  1. pip install -r requirements.txt        (discord.py>=2.4,<3, python-dotenv)
   2. Tạo file .env cạnh file này, nội dung 1 dòng:   DISCORD_TOKEN=token_của_bạn
   3. Discord Developer Portal -> Bot -> bật "Server Members Intent" & "Message Content Intent"
   4. python ninjawar_builder.py
@@ -24,12 +24,20 @@ Cơ chế ngôn ngữ:
   - !code: bot gửi tin nhắn riêng danh sách giftcode còn hạn cho người gõ lệnh.
   - !themcode / !xoacode: staff thêm, xóa giftcode; bot tự đăng code mới ở kênh giftcode.
   - Tin nhắn lệnh (bắt đầu bằng "!") không còn được tính vào cấp bậc.
+Điểm mới bản v7:
+  - Đóng ticket: ảnh/tệp đính kèm (biên lai nạp thẻ) được đăng lại vào kênh log, không mất khi xóa phòng.
+  - Mọi nút bấm trả lời Discord ngay rồi mới gán role, hết lỗi "tương tác thất bại" lúc đông người.
+  - !themcode báo lỗi khi gõ sai ngày hết hạn (trước đây âm thầm lưu thành code không thời hạn).
+  - Báo rõ khi danh mục ticket đầy 50 phòng; đổi ngôn ngữ gán role mới trước rồi mới gỡ role cũ.
+  - !xaykenh nhớ ID các bài bot đã đăng (lưu trong levels.db) nên không sửa nhầm bài khác.
+  - Log có thời gian và chi tiết lỗi đầy đủ để dễ dò lỗi trên VPS.
 """
 import asyncio
 import datetime as dt
 import io
 import logging
 import os
+import re
 import sqlite3
 import time
 
@@ -269,6 +277,8 @@ TXT = {
         "has_ticket": "Bạn đang có ticket mở: {ch}", "ticket_ok": "✅ Đã mở ticket: {ch}",
         "ticket_opening": "⏳ Đang khởi tạo ticket của bạn, vui lòng đợi giây lát...",
         "ticket_fail": "⚠️ Không tạo được ticket. Hãy báo staff.",
+        "ticket_full": "⚠️ Hiện có quá nhiều ticket đang mở nên chưa tạo thêm được. Staff đã được báo, bạn thử lại sau ít phút nhé.",
+        "error": "⚠️ Có lỗi xảy ra, bạn thử lại sau ít phút. Nếu vẫn lỗi hãy báo staff.",
         "no_ticket_cat": "⚠️ Chưa có danh mục ticket. Hãy báo staff.",
         "not_ticket": "⚠️ Đây không phải kênh ticket.",
         "close_denied": "⛔ Chỉ người mở ticket hoặc staff mới đóng được.",
@@ -298,6 +308,8 @@ TXT = {
         "has_ticket": "You already have an open ticket: {ch}", "ticket_ok": "✅ Ticket opened: {ch}",
         "ticket_opening": "⏳ Creating your ticket, please wait a moment...",
         "ticket_fail": "⚠️ Couldn't open a ticket. Please tell staff.",
+        "ticket_full": "⚠️ Too many tickets are open right now, so a new one can't be created. Staff have been notified, please try again in a few minutes.",
+        "error": "⚠️ Something went wrong. Please try again in a few minutes, and tell staff if it keeps failing.",
         "no_ticket_cat": "⚠️ The ticket category is missing. Please tell staff.",
         "not_ticket": "⚠️ This is not a ticket channel.",
         "close_denied": "⛔ Only the ticket owner or staff can close it.",
@@ -487,6 +499,8 @@ STAFF_KEYS = ("hokage", "anbu", "support")  # role được thấy và đóng m�
 GIFT_ADMIN_KEYS = ("hokage", "dev", "anbu")   # role được thêm/xóa giftcode (chủ server luôn được)
 CH_GIFT = {"vi": "🎁-giftcode", "en": "🎁-gift-codes"}  # nơi bot tự đăng code mới
 GAME_TZ = dt.timezone(dt.timedelta(hours=7))   # giờ Việt Nam: code hết hạn lúc 23:59 ngày HSD
+TICKET_CAT_LIMIT = 50      # Discord cho tối đa 50 kênh trong một danh mục
+TRANSCRIPT_MAX_FILES = 40  # số ảnh/tệp tối đa được đăng lại vào kênh log khi đóng một ticket
 
 
 # =====================================================================
@@ -720,12 +734,26 @@ async def reply(interaction, text: str):
         await interaction.response.send_message(text, ephemeral=True)
 
 
+async def ack(interaction) -> bool:
+    """Trả lời Discord ngay (hạn 3 giây) trước khi làm việc chậm như gán role.
+    Trả về False nếu tương tác đã hết hạn: người dùng chỉ cần bấm lại."""
+    if interaction.response.is_done():
+        return True
+    try:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        return True
+    except discord.HTTPException:
+        return False
+
+
 async def choose_language(interaction, lang: str):
     """Gán role ngôn ngữ (chỉ giữ 1). Người đã xác minh được đổi luôn role thành viên sang ngôn ngữ mới."""
     guild, member, t = interaction.guild, interaction.user, TXT[lang]
     want = find_role(guild, LANG_ROLE[lang])
     if want is None:
         return await reply(interaction, t["no_role"])
+    if not await ack(interaction):
+        return
     other = "en" if lang == "vi" else "vi"
     add, remove = [want], []
     other_lang = find_role(guild, LANG_ROLE[other])
@@ -739,11 +767,11 @@ async def choose_language(interaction, lang: str):
         if old_member and old_member in member.roles:
             remove.append(old_member)
     add = [r for r in add if r not in member.roles]
-    try:
-        if remove:
-            await member.remove_roles(*remove, reason="Đổi ngôn ngữ")
+    try:  # gán role mới trước, gỡ role cũ sau: nếu lỗi giữa chừng người chơi không bị mất hết kênh
         if add:
             await member.add_roles(*add, reason="Chọn ngôn ngữ")
+        if remove:
+            await member.remove_roles(*remove, reason="Đổi ngôn ngữ")
     except discord.Forbidden:
         return await reply(interaction, t["no_perm"])
     await reply(interaction, t["lang_set"])
@@ -756,6 +784,8 @@ async def verify(interaction, lang: str):
         return await reply(interaction, t["no_role"])
     if role in member.roles:
         return await reply(interaction, t["already"])
+    if not await ack(interaction):
+        return
     lang_role = find_role(guild, LANG_ROLE[lang])
     try:
         await member.add_roles(*[r for r in (role, lang_role) if r and r not in member.roles],
@@ -772,6 +802,8 @@ async def toggle_ping(interaction, role_key: str, lang: str, label: str):
         return await reply(interaction, t["no_role"])
     if not is_verified(guild, member):
         return await reply(interaction, t["not_verified"])
+    if not await ack(interaction):
+        return
     try:
         if role in member.roles:
             await member.remove_roles(role, reason="Tự tắt thông báo")
@@ -788,6 +820,24 @@ async def toggle_ping(interaction, role_key: str, lang: str, label: str):
 # =====================================================================
 _opening_tickets: set[tuple[int, int]] = set()  # khóa (guild_id, user_id) đang tạo ticket
 _closing_tickets: set[int] = set()              # khóa channel_id đang đóng ticket
+_full_notice_ts: dict[int, float] = {}          # category_id -> lần gần nhất báo staff "danh mục đầy"
+
+
+async def notify_ticket_full(guild, cat):
+    """Báo staff (tối đa 10 phút một lần) rằng danh mục ticket đã đầy."""
+    now = time.time()
+    if now - _full_notice_ts.get(cat.id, 0.0) < 600:
+        return
+    _full_notice_ts[cat.id] = now
+    log.warning("Danh mục ticket %s đã đầy %s kênh", cat.name, TICKET_CAT_LIMIT)
+    log_ch = find_text_channel(guild, CH_LOG)
+    if log_ch is None:
+        return
+    try:
+        await log_ch.send(f"⚠️ Danh mục **{cat.name}** đã đầy {TICKET_CAT_LIMIT} phòng (giới hạn của Discord). "
+                          "Người chơi không mở thêm ticket được cho đến khi staff đóng bớt ticket cũ.")
+    except discord.HTTPException:
+        pass
 
 
 def is_staff(guild, member):
@@ -815,8 +865,12 @@ async def open_ticket(interaction, kind: str):
             for ch in tc.text_channels:  # mỗi người chỉ mở 1 ticket cùng lúc (tính cả hai bên)
                 if ch.topic and ch.topic.startswith(f"ticket:{member.id}:"):
                     return await reply(interaction, t["has_ticket"].format(ch=ch.mention))
+        if len(cat.channels) >= TICKET_CAT_LIMIT:
+            await reply(interaction, t["ticket_full"])
+            return await notify_ticket_full(guild, cat)
 
-        await interaction.response.defer(ephemeral=True)
+        if not await ack(interaction):
+            return
         staff_roles = [r for r in (find_role(guild, k) for k in STAFF_KEYS) if r]
         overwrites = {
             guild.default_role: PO(view_channel=False),
@@ -846,6 +900,40 @@ async def open_ticket(interaction, kind: str):
         _opening_tickets.discard(lock_key)
 
 
+async def repost_attachments(log_ch, items, limit_bytes: int):
+    """Đăng lại ảnh/tệp của ticket vào kênh log, vì link gốc chết khi phòng ticket bị xóa.
+    items: [(tên tệp trong log, attachment)]. Trả về (số đã lưu, số không lưu được)."""
+    saved = skipped = 0
+    batch, batch_bytes = [], 0
+
+    async def flush():
+        nonlocal saved, skipped, batch, batch_bytes
+        if not batch:
+            return
+        try:
+            await log_ch.send(files=batch)
+            saved += len(batch)
+        except discord.HTTPException as e:
+            log.warning("Không đăng lại được %s tệp của ticket: %s", len(batch), e)
+            skipped += len(batch)
+        batch, batch_bytes = [], 0
+
+    for name, att in items:
+        if att.size > limit_bytes:
+            skipped += 1
+            continue
+        if len(batch) >= 10 or batch_bytes + att.size > limit_bytes:  # tối đa 10 tệp và 1 mức dung lượng mỗi tin
+            await flush()
+        try:
+            batch.append(await att.to_file(filename=name))
+            batch_bytes += att.size
+        except discord.HTTPException as e:
+            log.warning("Không tải được tệp %s của ticket: %s", att.filename, e)
+            skipped += 1
+    await flush()
+    return saved, skipped
+
+
 async def close_ticket(interaction, lang: str):
     guild, ch, user, t = interaction.guild, interaction.channel, interaction.user, TXT[lang]
     topic = getattr(ch, "topic", None) or ""
@@ -867,11 +955,17 @@ async def close_ticket(interaction, lang: str):
     _closing_tickets.add(ch.id)
     try:
         await interaction.response.send_message(t["closing"])
-        lines = []
+        lines, files, extra = [], [], 0
         async for m in ch.history(limit=2000, oldest_first=True):
             text = m.clean_content
-            if m.attachments:
-                text += " " + " ".join(a.url for a in m.attachments)
+            for a in m.attachments:
+                if len(files) < TRANSCRIPT_MAX_FILES:
+                    name = f"{len(files) + 1:02d}_{a.filename}"
+                    files.append((name, a))
+                    text += f" [tệp: {name}]"
+                else:
+                    extra += 1
+                    text += f" [tệp không lưu: {a.filename}]"
             stamp = m.created_at.strftime("%Y-%m-%d %H:%M:%S")
             lines.append(f"[{stamp} UTC] {m.author}: {text}")
         data = io.BytesIO("\n".join(lines).encode("utf-8"))
@@ -882,6 +976,16 @@ async def close_ticket(interaction, lang: str):
                 allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException as e:
             return await interaction.followup.send(f"⚠️ Lưu transcript thất bại ({e}), chưa đóng ticket.")
+        if files or extra:
+            saved, skipped = await repost_attachments(log_ch, files, guild.filesize_limit)
+            skipped += extra
+            note = f"📎 Ticket **{ch.name}**: đã lưu {saved} ảnh/tệp đính kèm ở trên."
+            if skipped:
+                note += f" ⚠️ {skipped} tệp không lưu được (quá lớn, lỗi tải hoặc vượt {TRANSCRIPT_MAX_FILES} tệp)."
+            try:
+                await log_ch.send(note)
+            except discord.HTTPException:
+                pass
         await asyncio.sleep(5)
         try:
             await ch.delete(reason=f"Ticket đóng bởi {user}")
@@ -923,6 +1027,14 @@ class ActionView(discord.ui.View):
                                     style=getattr(discord.ButtonStyle, style))
             btn.callback = self._callback(cid)
             self.add_item(btn)
+
+    async def on_error(self, interaction, error, item):
+        log.error("Lỗi nút %s", getattr(item, "custom_id", "?"), exc_info=error)
+        try:
+            lang = member_lang(interaction.guild, interaction.user) if interaction.guild else "vi"
+            await reply(interaction, TXT[lang]["error"])
+        except discord.HTTPException:
+            pass
 
     @staticmethod
     def _callback(cid):
@@ -975,11 +1087,13 @@ async def on_command_error(ctx, error):
             and ctx.command.name in ("themcode", "xoacode"):
         return await ctx.send(f"⚠️ Sai cú pháp. Dùng: `{ctx.prefix}{ctx.command.name} {ctx.command.signature}`\n"
                               "Ví dụ: `!themcode NINJA2026 31/12/2026 Kim cương x100 | 100 Diamonds`")
+    if isinstance(error, commands.NoPrivateMessage):
+        return await ctx.send("⚠️ Lệnh này chỉ dùng được trong server. · This command only works in the server.")
     if isinstance(error, commands.CheckFailure):
         return await ctx.send("⛔ Lệnh này chỉ **chủ server** dùng được, và chỉ trong server.")
     if isinstance(error, commands.MemberNotFound):
         return await ctx.send("⚠️ Không tìm thấy thành viên này trong server.")
-    log.error("Lỗi lệnh %s: %s", ctx.command, error)
+    log.error("Lỗi lệnh %s", ctx.command, exc_info=getattr(error, "original", error))
 
 
 def button_ids(msg):
@@ -997,6 +1111,17 @@ def button_labels(msg):
             for child in getattr(row, "children", []) or []]
 
 
+def saved_post_id(channel_id: int, slot: str):
+    row = db.execute("SELECT message_id FROM posts WHERE channel_id=? AND slot=?", (channel_id, slot)).fetchone()
+    return row[0] if row else None
+
+
+def remember_post(guild_id: int, channel_id: int, slot: str, message_id: int):
+    db.execute("INSERT OR REPLACE INTO posts (guild_id, channel_id, slot, message_id) VALUES (?,?,?,?)",
+               (guild_id, channel_id, slot, message_id))
+    db.commit()
+
+
 def resolve_msgs(spec):
     return [item if isinstance(item, tuple) else (item, None) for item in spec.get("msgs", [])]
 
@@ -1008,20 +1133,36 @@ async def sync_posts(guild, channel, spec, stats, warnings):
     if not items:
         return
     own = [m async for m in channel.history(limit=50, oldest_first=True) if m.author.id == guild.me.id]
+    plain_n = 0
     for raw_text, kind in items:
+        if kind:
+            slot = kind
+        else:
+            slot, plain_n = f"text{plain_n}", plain_n + 1
         text = raw_text[:2000]  # đảm bảo không vượt giới hạn 2000 ký tự của Discord
         if len(raw_text) > 2000:
             warnings.append(f"Bài mẫu tại `{channel.name}` dài quá 2000 ký tự nên đã được cắt bớt.")
-        if kind:
+        saved_id = saved_post_id(channel.id, slot)
+        if saved_id:  # bài bot đã ghi nhớ: tìm đúng bài đó, không đoán
+            match = next((m for m in own if m.id == saved_id), None)
+            if match is None:
+                try:
+                    match = await channel.fetch_message(saved_id)
+                except discord.NotFound:
+                    match = None  # bài đã bị xóa tay -> đăng lại bài mới
+        elif kind:  # lần đầu sau khi nâng cấp: ghép theo nút như bản cũ
             want = {b[0] for b in BUTTONS[kind]}
             match = next((m for m in own if button_ids(m) & want), None)
         else:
             match = next((m for m in own if not button_ids(m)), None)
         if match is None:
-            await channel.send(text, view=make_view(kind) if kind else None)
+            sent = await channel.send(text, view=make_view(kind) if kind else None)
+            remember_post(guild.id, channel.id, slot, sent.id)
             stats["posted"] += 1
             continue
-        own.remove(match)
+        if match in own:
+            own.remove(match)
+        remember_post(guild.id, channel.id, slot, match.id)
         labels = [b[2] for b in BUTTONS[kind]] if kind else []
         if match.content != text or (kind and button_labels(match) != labels):
             if kind:
@@ -1100,6 +1241,11 @@ db.execute(
     "CREATE TABLE IF NOT EXISTS msgs ("
     "guild_id INTEGER, user_id INTEGER, count INTEGER DEFAULT 0, last_ts REAL DEFAULT 0, "
     "PRIMARY KEY (guild_id, user_id))")
+# Bài mẫu bot đã đăng: nhớ ID để !xaykenh sửa đúng bài (slot = loại nút, hoặc text0, text1...)
+db.execute(
+    "CREATE TABLE IF NOT EXISTS posts ("
+    "guild_id INTEGER, channel_id INTEGER, slot TEXT, message_id INTEGER, "
+    "PRIMARY KEY (channel_id, slot))")
 db.commit()
 
 # Bộ nhớ đệm thời gian nhắn tin gần nhất trên RAM để tránh quét Role & gọi SQLite liên tục khi chat nhanh
@@ -1281,13 +1427,22 @@ def parse_expiry(text: str):
             return dt.datetime.strptime(t, fmt).date(), True
         except ValueError:
             pass
-    try:
-        d = dt.datetime.strptime(t, "%d/%m").date().replace(year=game_today().year)
-        if d < game_today():
-            d = d.replace(year=d.year + 1)
-        return d, True
-    except ValueError:
-        return None, False
+    m = re.fullmatch(r"(\d{1,2})[/-](\d{1,2})", t)  # '31/12': năm nay, hoặc năm sau nếu ngày đã qua
+    if m:
+        today = game_today()
+        for year in (today.year, today.year + 1):
+            try:
+                d = dt.date(year, int(m.group(2)), int(m.group(1)))
+            except ValueError:
+                continue
+            if d >= today:
+                return d, True
+    return None, False
+
+
+def looks_like_date(text: str) -> bool:
+    """Chuỗi toàn số ngăn bằng / hoặc - (vd 32/12/2026): người gõ định ghi ngày, không phải phần thưởng."""
+    return re.fullmatch(r"\d{1,4}([/-]\d{1,4}){1,2}", text.strip()) is not None
 
 
 def split_reward(reward: str, lang: str) -> str:
@@ -1382,6 +1537,9 @@ async def themcode(ctx: commands.Context, code: str, han: str = "-", *, phan_thu
     if not code or len(code) > 64 or "`" in code:
         return await ctx.send("⚠️ Code không hợp lệ (tối đa 64 ký tự, không chứa dấu `).")
     expires, ok = parse_expiry(han)
+    if not ok and looks_like_date(han):
+        return await ctx.send(f"⚠️ Ngày hết hạn `{han}` không hợp lệ. Ghi dạng `31/12/2026`, `31/12` "
+                              "hoặc `2026-12-31`; ghi `-` nếu code không có hạn.")
     if not ok:  # không ghi hạn: chữ thứ hai là phần thưởng
         phan_thuong = f"{han} {phan_thuong}".strip()
     if expires and expires < game_today():
@@ -1453,4 +1611,4 @@ async def taoticket(ctx: commands.Context):
 if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("❌ Chưa có DISCORD_TOKEN. Tạo file .env với dòng: DISCORD_TOKEN=token_của_bạn")
-    bot.run(TOKEN)
+    bot.run(TOKEN, root_logger=True)  # root_logger: log của bot có thời gian và mức độ như log của discord.py
